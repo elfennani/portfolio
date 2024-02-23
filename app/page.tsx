@@ -1,68 +1,84 @@
+/* eslint-disable @next/next/no-img-element */
 import Title from "../components/Title";
 import Input from "../components/Input";
 import Project from "../components/Project";
 import Link from "../components/Link";
 import fs from "fs/promises";
-import yaml from "js-yaml";
-import { ReactNode } from "react";
+import parseMD from "parse-md";
+import StyledMarkdown from "@/components/StyledMarkdown";
+import { DescriptionMetadata, Markdown, ProjectMetadata } from "@/types";
+import Container from "@/components/Container";
+import Footer from "@/components/Footer";
 
-interface Info {
-  heading: string;
-  fullname: string;
-  description: string;
-  resume: string;
+const screenshotsDir = process.cwd() + "/public/screenshots";
+const dataDir = process.cwd() + "/data";
+const projectsDir = dataDir + "/projects";
+
+async function mapProjects(project: string) {
+  const slug = project.split(".")[0];
+  const content = await fs.readFile(projectsDir + `/${project}`, "utf-8");
+  const md = parseMD(content) as Markdown<ProjectMetadata>;
+  const screenshots = (await fs.readdir(screenshotsDir + `/${slug}`)).map(
+    (ss) => ({
+      path: `/screenshots/${slug}/${ss}`,
+      thumbnail: md.metadata.thumbnail == ss,
+    })
+  );
+
+  return {
+    ...md.metadata,
+    content: md.content,
+    screenshots,
+    slug,
+  };
 }
 
 export default async function Home() {
-  const file = await fs.readFile(process.cwd() + "/data/info.yaml", "utf-8");
-  const info = yaml.load(file) as Info;
+  const file = await fs.readFile(dataDir + "/description.md", "utf-8");
+  const {
+    content,
+    metadata: { heading, resume, photo },
+  } = parseMD(file) as Markdown<DescriptionMetadata>;
 
-  const description = info.description
-    .split(info.fullname)
-    .flatMap((element, index, array) => {
-      return index < array.length - 1
-        ? [
-            element,
-            <span key={`name-${index}`} className="font-medium text-zinc-700">
-              {info.fullname}
-            </span>,
-          ]
-        : [element];
-    });
+  const projectsAsync = (await fs.readdir(projectsDir)).map(mapProjects);
+  const projects = (await Promise.all(projectsAsync)).sort(
+    (p1, p2) => p2.created.getTime() - p1.created.getTime()
+  );
 
   return (
-    <main className="w-[900px] max-w-full pt-24 mx-auto h-16 flex flex-col gap-32 max-[932px]:p-4 max-[900px]:pt-12 max-[932px]:gap-24">
+    <Container>
       <header className="flex flex-col gap-6">
-        <div className="size-20 rounded-full bg-zinc-200"></div>
-        <h1 className="text-2xl font-medium text-zinc-700">{info.heading}</h1>
-        <p className="leading-7 text-zinc-500">{description}</p>
+        <img
+          src={photo}
+          alt="Photo"
+          className="size-20 rounded-full bg-zinc-200 grayscale"
+        />
+        <h1 className="text-2xl font-medium text-zinc-700">{heading}</h1>
+        <StyledMarkdown>{content}</StyledMarkdown>
         <div className="flex gap-8">
           <Link href="#contact">Contact Me</Link>
-          <Link href="#Resume">Download Resume</Link>
+          <Link href={resume}>Download Resume</Link>
         </div>
       </header>
       <section className="flex flex-col gap-6">
         <Title>Some of my projects</Title>
         <div className="grid grid-cols-3 gap-6 max-md:grid-cols-2 max-sm:grid-cols-1">
-          <Project title="Elysian Eats (Food Delivery App)">
-            Revolutionizing the way people experience food delivery, Elysian
-            Eats is a dynamic app designed to connect users with their favorite
-            local eateries. With seamless navigation and real-time order
-            tracking, this platform ensures a delightful dining experience for
-            all.
-          </Project>
-          <Project title="Aurora: (E-commerce Platform)">
-            Aurora redefines online shopping by offering a curated selection of
-            premium products coupled with personalized recommendations. With its
-            sleek interface and robust backend, users can easily discover,
-            purchase, and share their favorite items with ease.
-          </Project>
-          <Project title="Nimbus Notes (Productivity App)">
-            Nimbus Notes empowers users to organize their thoughts, tasks, and
-            ideas effortlessly. Featuring a minimalist design and powerful
-            features like cross-platform syncing and collaborative editing, this
-            app is your go-to companion for staying productive and organized.
-          </Project>
+          {projects.map((project) => {
+            const thumbnail = project.screenshots.find(
+              (ss) => ss.thumbnail
+            )?.path;
+
+            return (
+              <Project
+                key={project.slug}
+                title={project.title}
+                thumbnail={thumbnail ?? project.screenshots[0].path}
+                slug={project.slug}
+              >
+                {project.content}
+              </Project>
+            );
+          })}
         </div>
       </section>
       <section className="flex flex-col gap-6">
@@ -86,42 +102,6 @@ export default async function Home() {
           </div>
         </div>
       </section>
-      <footer className="flex flex-col gap-2">
-        <form id="contact" className="bg-zinc-100 p-6 flex flex-col gap-6">
-          <div className="flex flex-col gap-3">
-            <Title>Looking for help?</Title>
-            <p className="text-zinc-500">Send me details now</p>
-          </div>
-          <Input label="Name" placeholder="John Doe" name="name" />
-          <Input label="Email" placeholder="example@abcd.xyz" name="email" />
-          <Input
-            label="Details"
-            placeholder="Enter your message"
-            name="details"
-            textarea
-          />
-          <button
-            type="submit"
-            className="text-zinc-700 self-end font-medium leading-6 underline transition-colors hover:text-zinc-500"
-          >
-            Submit
-          </button>
-        </form>
-        <nav className="flex justify-between py-6 max-[932px]:flex-col max-[932px]:items-center gap-6">
-          <p className="text-zinc-500">Made with Next.js</p>
-          <ul className="flex gap-x-16 gap-y-2 items-center justify-center flex-wrap max-[932px]:gap-x-8">
-            <li>
-              <Link href="#">Source Code</Link>
-            </li>
-            <li>
-              <Link href="#">LinkedIn</Link>
-            </li>
-            <li>
-              <Link href="#">GitHub</Link>
-            </li>
-          </ul>
-        </nav>
-      </footer>
-    </main>
+    </Container>
   );
 }
